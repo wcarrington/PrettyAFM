@@ -47,17 +47,23 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
         return await conn.respondJSON(["error": "Expected {messages: [...]}"], status: 400)
     }
     let messages = raw.compactMap(ChatMessage.init)
-    guard let last = messages.last, last.role == "user" else {
+    guard messages.last?.role == "user" else {
         return await conn.respondJSON(["error": "The last message must be from the user."], status: 400)
     }
     let mode = body["mode"] as? String ?? "auto"
     let think = body["think"] as? Bool ?? false
 
-    let started = Date()
-    let decision = await Router.decide(messages: messages, mode: mode, think: think)
-
     do {
         try await conn.beginStream()
+
+        // Attach PDF text (full, relevant passages, or on-device section summaries) to the latest user turn.
+        let messages = try await DocumentContext.prepare(messages: messages, mode: mode, profile: profile) {
+            try await conn.emit($0)
+        }
+        let last = messages[messages.count - 1]
+
+        let started = Date()
+        let decision = await Router.decide(messages: messages, mode: mode, think: think)
         var route = decision.json
         route["model"] = decision.backend == .apple ? "Apple Foundation Model" : profile.displayName
         route["routingMs"] = Int(Date().timeIntervalSince(started) * 1000)
@@ -77,7 +83,7 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
         if decision.backend == .apple {
             let t0 = Date()
             do {
-                let tokens = try await AppleModel.stream(history: Array(messages.dropLast()), prompt: last.content) { text, replace in
+                let tokens = try await AppleModel.stream(history: Array(messages.dropLast()), prompt: last.fullContent) { text, replace in
                     try await conn.emit(["type": replace ? "replace" : "delta", "text": text])
                 }
                 let secs = Date().timeIntervalSince(t0)
@@ -101,6 +107,23 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
             message = "Can't reach Ollama. Open the Ollama app or run `ollama serve`."
         }
         try? await conn.emit(["type": "error", "message": message])
+    }
+    conn.close()
+}
+
+/// POST /api/documents — raw PDF bytes in the body, file name in the X-Filename header (URL-encoded).
+/// Streams extraction progress, then the document's metadata.
+func handleDocumentUpload(_ req: HTTPRequest, _ conn: HTTPConnection) async {
+    let rawName = req.headers["x-filename"].flatMap { $0.removingPercentEncoding } ?? "Document.pdf"
+    let name = String(rawName.split(separator: "/").last ?? "Document.pdf").prefix(200)
+    do {
+        try await conn.beginStream()
+        let doc = try await PDFExtractor.extract(data: req.body, name: String(name)) { page, total, ocr in
+            try await conn.emit(["type": "progress", "page": page, "pages": total, "ocr": ocr])
+        }
+        try await conn.emit(["type": "done", "document": doc.meta])
+    } catch {
+        try? await conn.emit(["type": "error", "message": error.localizedDescription])
     }
     conn.close()
 }
@@ -143,6 +166,7 @@ let server = try HTTPServer(port: port) { req, conn in
     case ("GET", "/api/status"): await conn.respondJSON(await statusJSON())
     case ("POST", "/api/chat"): await handleChat(req, conn)
     case ("POST", "/api/pull"): await handlePull(conn)
+    case ("POST", "/api/documents"): await handleDocumentUpload(req, conn)
     case ("GET", _): await serveStatic(req.path, conn)
     default: await conn.respondJSON(["error": "Method not allowed"], status: 405)
     }

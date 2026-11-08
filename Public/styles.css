@@ -54,6 +54,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; scroll-padding-top: 60px; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -237,6 +238,25 @@ details.thinking .thinking-body { white-space: pre-wrap; margin-top: 6px; paddin
 .meta { font-size: 12px; color: var(--text-3); margin-top: 8px; }
 .error-text { color: var(--red); }
 
+/* Documents */
+.doc-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 6px; max-width: 78%; }
+.doc-chip {
+  display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 280px;
+  padding: 8px 14px 8px 10px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line-soft);
+  color: var(--text); text-align: left;
+}
+.doc-chip svg { flex: none; color: var(--red); }
+.doc-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.doc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-detail { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-chip.reading .doc-detail { color: var(--blue); }
+.doc-chip.reading svg { animation: pulse 1s infinite; }
+.doc-chip.error .doc-detail { color: var(--red); white-space: normal; }
+.attachments { flex-wrap: wrap; }
+.attachments .doc-attachment .doc-chip { background: var(--surface); }
+.context-note { font-size: 12px; color: var(--text-3); margin: -4px 0 8px; }
+.context-note:empty, .reroute:empty, .route-reason:empty { display: none; }
+
 /* Composer */
 .composer { padding: 12px 18px 18px; }
 .attachments { display: flex; gap: 8px; padding: 0 4px 10px; }
@@ -297,7 +317,7 @@ details.thinking .thinking-body { white-space: pre-wrap; margin-top: 6px; paddin
 .progress-label { font-size: 13px; color: var(--text-3); margin: 8px 0 0; }
 
 .how-section { background: var(--bg-alt); padding: 100px 22px; }
-.steps { list-style: none; max-width: 980px; margin: 0 auto; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.steps { list-style: none; max-width: 1100px; margin: 0 auto; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 20px; }
 .steps li { background: var(--surface); border-radius: var(--radius-lg); padding: 28px 24px; }
 .step-num { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 600; margin-bottom: 16px; }
 .steps h3 { margin: 0 0 6px; font-size: 19px; line-height: 1.2; }
@@ -306,9 +326,7 @@ details.thinking .thinking-body { white-space: pre-wrap; margin-top: 6px; paddin
 .footer { padding: 24px 22px 40px; text-align: center; font-size: 12px; color: var(--text-3); border-top: 1px solid var(--line-soft); max-width: 980px; margin: 0 auto; }
 
 /* ── Responsive ─────────────────────────────── */
-@media (max-width: 900px) {
-  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+
 @media (max-width: 734px) {
   .nav-links { display: none; }
   .nav-inner { justify-content: space-between; padding: 0 16px; }
@@ -323,7 +341,7 @@ details.thinking .thinking-body { white-space: pre-wrap; margin-top: 6px; paddin
   .messages { padding: 20px 16px 8px; }
   .suggestions, .tiles, .steps { grid-template-columns: 1fr; }
   .tile { padding: 32px 24px; }
-  .msg-user .bubble { max-width: 88%; }
+  .msg-user .bubble, .doc-row { max-width: 88%; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

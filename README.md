@@ -5,6 +5,8 @@ A web chat app in the style of Apple's website that runs entirely on your Mac. E
 - **Apple Foundation Model** (the on-device model built into macOS): summarizing, rewriting, extraction, tagging, short creative writing and conversation. It answers in well under a second.
 - **Qwen via Ollama**: code, math, reasoning, factual knowledge, long documents and images.
 
+You can attach PDFs by clicking the paperclip, dragging them onto the chat, or pasting them.
+
 Nothing leaves your Mac. The server listens on `127.0.0.1` only.
 
 ## Requirements
@@ -43,6 +45,25 @@ The router lives in `Sources/PrettyAFM/Router.swift`. It applies these checks in
 4. **On-device triage.** Apple's model sorts the request into one of 15 categories using guided generation (`@Generable`). Each category maps to a backend. A pre-warmed session keeps this under a second.
 5. **Fallback.** If Apple's model exceeds its context window, trips a safety guardrail, or doesn't support the language, Qwen answers instead and the UI shows a note saying so.
 
+## PDFs
+
+PDFKit extracts text page by page. Pages with no text layer, such as scans, are OCR'd on device with the Vision framework. How a PDF reaches the model depends on its size:
+
+| Situation | What the model sees | Usually answered by |
+|---|---|---|
+| Fits the model's context window | The whole text, with `[Page N]` markers | Apple for short PDFs, otherwise Qwen |
+| Too long, and you ask for a summary | Apple's model summarizes the PDF in ~2,800-token sections, combining them further if needed, then answers from the summaries | Apple |
+| Too long, any other question | The opening plus the most relevant ~450-token passages, ranked by BM25 | Whichever model fits the selected passages |
+
+Answers cite pages like "(p. 37)". A note under each answer says which pages were used.
+
+Extracted text and section summaries are saved in `~/Library/Application Support/PrettyAFM/documents/`, keyed by the file's SHA-256 hash. Re-attaching the same file is instant, a second summary of the same PDF skips the section step, and conversations keep working after a server restart. Delete that folder to clear them.
+
+Measured on a 16 GB M2 Pro with a 60-page, ~31K-token PDF:
+- a fact-finding question took about 5 s;
+- the first full summary took about 100 s (12 sections);
+- repeat summaries took about 14 s.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -57,11 +78,13 @@ The router lives in `Sources/PrettyAFM/Router.swift`. It applies these checks in
 
 ```
 Sources/PrettyAFM/
-  main.swift        API routes: /api/status, /api/chat (NDJSON stream), /api/pull
+  main.swift        API routes: /api/status, /api/chat (NDJSON stream), /api/pull, /api/documents
   HTTPServer.swift  Minimal Network.framework HTTP server (loopback only)
   Router.swift      Routing rules and on-device triage
   AppleModel.swift  FoundationModels session, streaming, fallback errors
   Ollama.swift      Ollama chat and pull streaming
+  Documents.swift   PDF text extraction, Vision OCR, document storage
+  DocumentContext.swift  Full text vs. section summaries vs. relevant passages for attached PDFs
   Models.swift      Shared types and the memory-based Qwen choice
 Public/             Web UI (plain HTML/CSS/JS, no build step, no CDN)
 ```

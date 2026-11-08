@@ -89,11 +89,15 @@ enum Router {
         // Keep well inside the on-device window: prompt + history + room for the reply.
         let ratio = ProcessInfo.processInfo.environment["LI_APPLE_BUDGET"].flatMap(Double.init) ?? 0.7
         let budget = Int(Double(AppleModel.model.contextSize) * ratio)
-        let used = messages.reduce(0) { $0 + estimateTokens($1.content) }
+        let used = messages.reduce(0) { $0 + estimateTokens($1.fullContent) }
         if used > budget {
             return .init(backend: .qwen, reason: "About \(used.formatted()) tokens is too long for the on-device model's \(AppleModel.model.contextSize.formatted())-token window.", category: "Long context", method: "rule")
         }
 
+        let hasDocs = !(last?.documentContext.isEmpty ?? true)
+        if hasDocs, DocumentContext.isSummaryRequest(text) {
+            return .init(backend: .apple, reason: "Summarizing a document is a core strength of Apple's on-device model.", category: TaskKind.summarize.label, method: "rule")
+        }
         if looksLikeCode(text) {
             return .init(backend: .qwen, reason: "The message contains code.", category: TaskKind.code.label, method: "rule")
         }
@@ -106,7 +110,7 @@ enum Router {
         }
 
         // Short follow-ups ("shorter", "why?", "another one") stay with whichever model answered last.
-        if words(text) <= 8, let prev = messages.last(where: { $0.role == "assistant" })?.backend {
+        if words(text) <= 8, last?.documents.isEmpty ?? true, let prev = messages.last(where: { $0.role == "assistant" })?.backend {
             return .init(backend: prev, reason: "A short follow-up stays with the model that answered last.", category: nil, method: "rule")
         }
 

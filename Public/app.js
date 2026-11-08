@@ -8,7 +8,7 @@
   };
   const STORE_KEY = "prettyafm.v1";
 
-  const state = { messages: [], mode: "auto", think: false, pending: [], controller: null, status: null };
+  const state = { messages: [], mode: "auto", think: false, pending: [], pendingDocs: [], controller: null, status: null };
 
   // ── Persistence (best effort; private windows may refuse storage) ─────────
   function save() {
@@ -51,8 +51,21 @@
       m.images.forEach((src) => { const img = new Image(); img.src = src; img.alt = "Attached image"; t.append(img); });
       wrap.append(t);
     }
+    if (m.documents?.length) {
+      const d = el("div", "doc-row");
+      m.documents.forEach((doc) => d.append(docChip(doc.name, `${doc.pages} page${doc.pages === 1 ? "" : "s"}`)));
+      wrap.append(d);
+    }
     if (m.content) { const b = el("div", "bubble"); b.textContent = m.content; wrap.append(b); }
     return wrap;
+  }
+
+  function docChip(name, detail, cls = "") {
+    const c = el("div", `doc-chip ${cls}`);
+    c.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 2.75h8.2L19.25 7.8V20a1.25 1.25 0 01-1.25 1.25H6A1.25 1.25 0 014.75 20V4A1.25 1.25 0 016 2.75z" fill="currentColor" opacity=".14"/><path d="M14 2.75V8h5.25M6 2.75h8.2L19.25 7.8V20a1.25 1.25 0 01-1.25 1.25H6A1.25 1.25 0 014.75 20V4A1.25 1.25 0 016 2.75z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="doc-text"><span class="doc-name"></span><span class="doc-detail"></span></span>`;
+    c.querySelector(".doc-name").textContent = name;
+    c.querySelector(".doc-detail").textContent = detail;
+    return c;
   }
 
   function routeChip(meta) {
@@ -91,6 +104,10 @@
     if (meta.reroute) reroute.textContent = meta.reroute;
     wrap.append(reroute);
 
+    const context = el("p", "context-note");
+    if (meta.context) context.textContent = meta.context + ".";
+    wrap.append(context);
+
     const thinking = el("details", "thinking");
     thinking.innerHTML = `<summary>Thought process</summary><div class="thinking-body"></div>`;
     if (m.thinking) thinking.querySelector(".thinking-body").textContent = m.thinking;
@@ -106,7 +123,7 @@
     foot.textContent = metaLine(meta);
     wrap.append(foot);
 
-    return { wrap, chipHolder, reason, reroute, thinking, answer, foot };
+    return { wrap, chipHolder, reason, reroute, context, thinking, answer, foot };
   }
 
   function renderAll() {
@@ -163,7 +180,9 @@
     const streaming = !!state.controller;
     els.send.classList.toggle("streaming", streaming);
     els.send.setAttribute("aria-label", streaming ? "Stop" : "Send");
-    els.send.disabled = !streaming && !els.input.value.trim() && !state.pending.length;
+    const uploading = state.pendingDocs.some((d) => d.status === "reading");
+    const hasDocs = state.pendingDocs.some((d) => d.status === "ready");
+    els.send.disabled = !streaming && (uploading || (!els.input.value.trim() && !state.pending.length && !hasDocs));
   }
   els.input.addEventListener("input", autosize);
   els.input.addEventListener("keydown", (e) => {
@@ -172,25 +191,82 @@
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (state.controller) return stop();
-    const text = els.input.value.trim();
+    if (state.pendingDocs.some((d) => d.status === "reading")) return;
+    const docs = state.pendingDocs.filter((d) => d.status === "ready").map((d) => d.meta);
+    let text = els.input.value.trim();
+    if (!text && docs.length) text = "Summarize this document.";
     if (!text && !state.pending.length) return;
-    send(text, state.pending.slice());
+    send(text, state.pending.slice(), docs);
     els.input.value = "";
     state.pending = [];
+    state.pendingDocs = [];
     renderAttachments();
     autosize();
   });
-  document.querySelectorAll(".suggestion").forEach((b) =>
-    b.addEventListener("click", () => { if (!state.controller) send(b.dataset.prompt, []); }));
+  document.querySelectorAll(".suggestion[data-prompt]").forEach((b) =>
+    b.addEventListener("click", () => { if (!state.controller) send(b.dataset.prompt, [], []); }));
+  document.querySelector(".suggestion-pdf").addEventListener("click", () => els.file.click());
 
   // Images: downscale to keep requests small and fast.
-  async function addImages(files) {
+  const isPDF = (f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+
+  async function addFiles(files) {
     for (const f of files) {
-      if (!f.type.startsWith("image/")) continue;
-      state.pending.push(await downscale(f, 1536));
+      if (isPDF(f)) uploadDocument(f);
+      else if (f.type.startsWith("image/")) state.pending.push(await downscale(f, 1536));
     }
     renderAttachments();
     updateSend();
+  }
+
+  /** Uploads a PDF; the server extracts text (OCR for scans) and streams progress. */
+  async function uploadDocument(file) {
+    const entry = { name: file.name, status: "reading", detail: "Reading…", meta: null };
+    state.pendingDocs.push(entry);
+    renderAttachments();
+    try {
+      if (file.size > 60 * 1024 * 1024) throw new Error("PDFs must be under 60 MB.");
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/pdf", "X-Filename": encodeURIComponent(file.name) },
+        body: file,
+      });
+      if (!res.ok || !res.body) throw new Error((await res.json().catch(() => ({}))).error || `Upload failed (${res.status})`);
+      await readNDJSON(res, (e) => {
+        if (e.type === "progress") {
+          entry.detail = e.ocr ? `Scanning page ${e.page} of ${e.pages}…` : `Reading page ${e.page} of ${e.pages}…`;
+        } else if (e.type === "done") {
+          entry.meta = { id: e.document.id, name: e.document.name, pages: e.document.pages };
+          entry.status = "ready";
+          const p = e.document.pages;
+          entry.detail = `${p} page${p === 1 ? "" : "s"}` + (e.document.ocrPages ? ` · ${e.document.ocrPages} scanned` : "");
+        } else if (e.type === "error") throw new Error(e.message);
+        renderAttachments();
+      });
+      if (entry.status !== "ready") throw new Error("Upload ended early.");
+    } catch (err) {
+      entry.status = "error";
+      entry.detail = err instanceof TypeError ? "Can't reach the server." : err.message;
+    }
+    renderAttachments();
+    updateSend();
+  }
+
+  async function readNDJSON(res, onEvent) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line) onEvent(JSON.parse(line));
+      }
+    }
   }
   function downscale(file, max) {
     return new Promise((resolve, reject) => {
@@ -208,8 +284,16 @@
     });
   }
   function renderAttachments() {
-    els.attachments.hidden = !state.pending.length;
-    els.attachments.replaceChildren(...state.pending.map((src, i) => {
+    els.attachments.hidden = !state.pending.length && !state.pendingDocs.length;
+    const docs = state.pendingDocs.map((d, i) => {
+      const f = el("figure", "doc-attachment");
+      f.append(docChip(d.name, d.detail, d.status));
+      const x = el("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", `Remove ${d.name}`);
+      x.onclick = () => { state.pendingDocs.splice(i, 1); renderAttachments(); updateSend(); };
+      f.append(x);
+      return f;
+    });
+    els.attachments.replaceChildren(...docs, ...state.pending.map((src, i) => {
       const f = el("figure");
       const img = new Image(); img.src = src; img.alt = "Attachment";
       const x = el("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Remove image");
@@ -218,15 +302,19 @@
       return f;
     }));
   }
-  els.file.addEventListener("change", () => { addImages([...els.file.files]); els.file.value = ""; });
+  els.file.addEventListener("change", () => { addFiles([...els.file.files]); els.file.value = ""; });
   els.input.addEventListener("paste", (e) => {
-    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (files.length) { e.preventDefault(); addImages(files); }
+    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/") || isPDF(f));
+    if (files.length) { e.preventDefault(); addFiles(files); }
   });
   const row = $(".composer-row");
   ["dragenter", "dragover"].forEach((t) => row.addEventListener(t, (e) => { e.preventDefault(); row.classList.add("dragging"); }));
   ["dragleave", "drop"].forEach((t) => row.addEventListener(t, () => row.classList.remove("dragging")));
-  row.addEventListener("drop", (e) => { e.preventDefault(); addImages([...e.dataTransfer.files]); });
+  row.addEventListener("drop", (e) => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
+  // Dropping anywhere on the chat card works too.
+  const card = document.querySelector(".chat-card");
+  card.addEventListener("dragover", (e) => { if ([...e.dataTransfer.items].some((i) => i.kind === "file")) e.preventDefault(); });
+  card.addEventListener("drop", (e) => { if (e.target.closest(".composer-row")) return; e.preventDefault(); addFiles([...e.dataTransfer.files]); });
 
   // Copy buttons on code blocks.
   els.messages.addEventListener("click", async (e) => {
@@ -240,9 +328,9 @@
   // ── Chat streaming ───────────────────────────────────────────────────────
   function stop() { state.controller?.abort(); }
 
-  async function send(text, images) {
+  async function send(text, images, documents = []) {
     els.empty.hidden = true;
-    const user = { role: "user", content: text, images };
+    const user = { role: "user", content: text, images, documents };
     state.messages.push(user);
     els.messages.append(renderUser(user));
 
@@ -274,9 +362,10 @@
       });
     };
 
-    const history = state.messages.map(({ role, content, images, backend }) => ({
+    const history = state.messages.map(({ role, content, images, backend, documents }) => ({
       role, content, backend: backend || undefined,
       images: images?.length ? images : undefined,
+      documents: documents?.length ? documents.map((d) => d.id) : undefined,
     }));
 
     try {
@@ -290,20 +379,7 @@
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Server returned ${res.status}`);
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (line) handleEvent(JSON.parse(line));
-        }
-      }
+      await readNDJSON(res, handleEvent);
     } catch (err) {
       if (err.name === "AbortError") reply.meta.stopped = true;
       else reply.error = friendlyError(err);
@@ -342,6 +418,11 @@
           ui.chipHolder.replaceChildren(routeChip(reply.meta));
           ui.reroute.textContent = e.reason;
           paint();
+          break;
+        case "progress": ui.reason.textContent = e.message; scrollToEnd(); break;
+        case "context":
+          reply.meta.context = e.text;
+          ui.context.textContent = e.text + ".";
           break;
         case "thinking": reply.thinking += e.text; paint(); break;
         case "delta": reply.content += e.text; paint(); break;

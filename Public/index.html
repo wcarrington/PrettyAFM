@@ -27,7 +27,7 @@
     <section class="hero">
       <p class="eyebrow">Private. On device. Free.</p>
       <h1>Intelligence.<br><span class="gradient-text">Right on your Mac.</span></h1>
-      <p class="hero-sub">Apple's on-device foundation model handles everyday language tasks instantly. Qwen steps in for code, math and deep knowledge. Nothing ever leaves your Mac.</p>
+      <p class="hero-sub">Apple's on-device foundation model handles everyday language tasks instantly. Qwen steps in for code, math and deep knowledge. Drop in a PDF and ask anything. Nothing ever leaves your Mac.</p>
       <div class="hero-ctas">
         <a class="pill pill-primary" href="#chat">Start a chat</a>
         <a class="link-arrow" href="#how">How routing works</a>
@@ -71,9 +71,9 @@
                 <span class="sug-model qwen">Qwen</span>
                 Write a Swift debounce function
               </button>
-              <button class="suggestion" data-prompt="Explain how the TLS 1.3 handshake works and why it's faster than TLS 1.2.">
-                <span class="sug-model qwen">Qwen</span>
-                Explain the TLS 1.3 handshake
+              <button class="suggestion suggestion-pdf" type="button">
+                <span class="sug-model apple">PDF</span>
+                Summarize a PDF
               </button>
             </div>
           </div>
@@ -82,12 +82,12 @@
         <form class="composer" id="composer">
           <div class="attachments" id="attachments" hidden></div>
           <div class="composer-row">
-            <label class="icon-btn" title="Attach an image (uses Qwen's vision)">
-              <input type="file" id="fileInput" accept="image/*" multiple hidden>
+            <label class="icon-btn" title="Attach PDFs or images">
+              <input type="file" id="fileInput" accept="image/*,application/pdf,.pdf" multiple hidden>
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M21 12.5l-8.2 8.2a5.3 5.3 0 01-7.5-7.5l8.6-8.6a3.5 3.5 0 015 5l-8.6 8.6a1.8 1.8 0 01-2.5-2.5l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span class="sr-only">Attach image</span>
+              <span class="sr-only">Attach PDF or image</span>
             </label>
-            <textarea id="input" rows="1" placeholder="Message PrettyAFM" aria-label="Message"></textarea>
+            <textarea id="input" rows="1" placeholder="Message PrettyAFM, or drop a PDF" aria-label="Message"></textarea>
             <button type="submit" class="send-btn" id="sendBtn" aria-label="Send" disabled>
               <svg class="i-send" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <svg class="i-stop" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>
@@ -113,7 +113,7 @@
           <ul class="facts">
             <li><span>Best at</span>Summaries, rewriting, extraction, tagging, short creative writing, conversation</li>
             <li><span>Context</span><b id="appleCtx">—</b> tokens</li>
-            <li><span>Input</span>Text</li>
+            <li><span>Input</span>Text and PDFs (text extracted on device)</li>
           </ul>
         </article>
         <article class="tile tile-qwen">
@@ -122,7 +122,7 @@
           <p class="tile-status" id="qwenStatus"><span class="dot"></span>Checking…</p>
           <p class="tile-copy" id="qwenNote">Runs through Ollama, sized to fit your Mac's memory.</p>
           <ul class="facts">
-            <li><span>Best at</span>Code, math, reasoning, factual knowledge, long documents, images</li>
+            <li><span>Best at</span>Code, math, reasoning, factual knowledge, long PDFs, images</li>
             <li><span>Context</span><b id="qwenCtx">—</b> tokens</li>
             <li><span>Model</span><code id="qwenTag">—</code></li>
           </ul>
@@ -161,6 +161,11 @@
           <span class="step-num">4</span>
           <h3>Seamless fallback.</h3>
           <p>If the on-device model hits its context limit or declines, Qwen picks up automatically.</p>
+        </li>
+        <li>
+          <span class="step-num">5</span>
+          <h3>PDFs of any length.</h3>
+          <p>Text is extracted on device, with OCR for scans. Short PDFs are read in full. For long ones, Apple's model summarizes section by section, or the most relevant pages are found for your question.</p>
         </li>
       </ol>
     </section>

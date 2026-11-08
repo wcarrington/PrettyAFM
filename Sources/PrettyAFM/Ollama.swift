@@ -48,7 +48,7 @@ enum Ollama {
             msgs.append(["role": "system", "content": "You are a helpful, precise assistant running locally on the user's Mac. Use Markdown for formatting. Only use LaTeX ($...$) for genuine math expressions."])
         }
         for m in messages {
-            var o: [String: Any] = ["role": m.role, "content": m.content]
+            var o: [String: Any] = ["role": m.role, "content": m.fullContent]
             if !m.images.isEmpty { o["images"] = m.images }
             msgs.append(o)
         }

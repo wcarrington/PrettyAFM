@@ -7,6 +7,19 @@ struct ChatMessage {
     let content: String
     let images: [String]      // base64, no data: prefix
     let backend: Backend?     // which model produced an assistant turn
+    let documents: [String]   // IDs of PDFs attached to this turn
+    /// Document text injected server-side for this turn. Kept apart from `content`
+    /// so routing classifies the user's own words, not the PDF.
+    var documentContext = ""
+
+    /// What the model actually sees.
+    var fullContent: String {
+        documentContext.isEmpty ? content : documentContext + "\n\nUser's message:\n" + content
+    }
+
+    init(role: String, content: String) {
+        self.role = role; self.content = content; self.images = []; self.backend = nil; self.documents = []
+    }
 
     init?(_ json: [String: Any]) {
         guard let role = json["role"] as? String, ["system", "user", "assistant"].contains(role) else { return nil }
@@ -17,6 +30,7 @@ struct ChatMessage {
             return s
         }
         self.backend = (json["backend"] as? String).flatMap(Backend.init(rawValue:))
+        self.documents = (json["documents"] as? [String] ?? []).filter(DocumentStore.isValidID)
     }
 }
 

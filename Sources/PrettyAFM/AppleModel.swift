@@ -42,7 +42,7 @@ enum AppleModel {
                 toolDefinitions: []))
         ]
         for m in history where m.role != "system" {
-            let seg = Transcript.Segment.text(.init(content: m.content))
+            let seg = Transcript.Segment.text(.init(content: m.fullContent))
             if m.role == "user" {
                 entries.append(.prompt(Transcript.Prompt(segments: [seg])))
             } else {
