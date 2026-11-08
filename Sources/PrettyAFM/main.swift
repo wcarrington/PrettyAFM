@@ -71,15 +71,18 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
         return await conn.respondJSON(["error": "The last message must be from the user."], status: 400)
     }
     let mode = body["mode"] as? String ?? "auto"
-    let think = body["think"] as? Bool ?? false
+    // Accuracy: "fast" (no extra passes), "checked" (default: double-check answers about PDFs), "deep" (+ Qwen thinking).
+    let accuracy = ["fast", "checked", "deep"].contains(body["accuracy"] as? String ?? "") ? body["accuracy"] as! String : "checked"
+    let think = accuracy == "deep" || (body["think"] as? Bool ?? false)
 
     do {
         try await conn.beginStream()
 
         // Attach PDF text (full, relevant passages, or on-device section summaries) to the latest user turn.
-        let messages = try await DocumentContext.prepare(messages: messages, mode: mode, profile: profile) {
+        let prepared = try await DocumentContext.prepare(messages: messages, mode: mode, profile: profile) {
             try await conn.emit($0)
         }
+        let messages = prepared.messages
         let last = messages[messages.count - 1]
 
         let started = Date()
@@ -89,36 +92,71 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
         route["routingMs"] = Int(Date().timeIntervalSince(started) * 1000)
         try await conn.emit(["type": "route"].merging(route) { a, _ in a })
 
+        // ── Draft ──
+        var answer = ""
+        var drafter = decision.backend
+        var done: [String: Any] = [:]
+        let t0 = Date()
+
         func runQwen() async throws {
-            let t0 = Date()
+            drafter = .qwen
             let stats = try await Ollama.chat(
                 profile: profile, messages: messages, think: think,
                 onThinking: { try await conn.emit(["type": "thinking", "text": $0]) },
-                onDelta: { try await conn.emit(["type": "delta", "text": $0]) })
-            try await conn.emit(["type": "done", "backend": "qwen", "outputTokens": stats.outputTokens,
-                                 "tokensPerSecond": (stats.tokensPerSecond * 10).rounded() / 10,
-                                 "seconds": (Date().timeIntervalSince(t0) * 10).rounded() / 10])
+                onDelta: { answer += $0; try await conn.emit(["type": "delta", "text": $0]) })
+            done = ["backend": "qwen", "outputTokens": stats.outputTokens,
+                    "tokensPerSecond": (stats.tokensPerSecond * 10).rounded() / 10]
         }
 
         if decision.backend == .apple {
-            let t0 = Date()
             do {
                 let tokens = try await AppleModel.stream(history: Array(messages.dropLast()), prompt: last.fullContent) { text, replace in
+                    answer = replace ? text : answer + text
                     try await conn.emit(["type": replace ? "replace" : "delta", "text": text])
                 }
                 let secs = Date().timeIntervalSince(t0)
-                try await conn.emit(["type": "done", "backend": "apple", "outputTokens": tokens,
-                                     "tokensPerSecond": secs > 0 ? (Double(tokens) / secs * 10).rounded() / 10 : 0,
-                                     "seconds": (secs * 10).rounded() / 10])
+                done = ["backend": "apple", "outputTokens": tokens,
+                        "tokensPerSecond": secs > 0 ? (Double(tokens) / secs * 10).rounded() / 10 : 0]
             } catch {
                 guard mode != "apple", let why = AppleModel.shouldFallBack(error) else { throw error }
                 try await conn.emit(["type": "reroute", "backend": "qwen", "model": profile.displayName,
                                      "reason": why + " Qwen answered instead."])
+                answer = ""
                 try await runQwen()
             }
         } else {
             try await runQwen()
         }
+        done["seconds"] = (Date().timeIntervalSince(t0) * 10).rounded() / 10
+
+        // ── Double-check (answers grounded in PDFs) ──
+        // Summaries are paraphrases, so they can't be checked quote-for-quote; skip that strategy.
+        if accuracy != "fast", !prepared.docs.isEmpty, prepared.strategy != "summary", !answer.isEmpty {
+            let v0 = Date()
+            let review = try await Verifier.review(
+                answer: answer, question: last.content, prepared: prepared, drafter: drafter, profile: profile,
+                status: { try await conn.emit(["type": "status", "text": $0]) },
+                onRevisionStart: { try await conn.emit(["type": "replace", "text": ""]) },
+                onRevisionDelta: { try await conn.emit(["type": "delta", "text": $0]) })
+            if let review {
+                if let revised = review.revisedText { answer = revised }
+                var r = review.json
+                r["seconds"] = (Date().timeIntervalSince(v0) * 10).rounded() / 10
+                try await conn.emit(["type": "review"].merging(r) { a, _ in a })
+            }
+        }
+
+        // ── Citation check (always, deterministic) ──
+        if !prepared.docs.isEmpty {
+            let fixed = CitationCheck.check(answer, docs: prepared.docs)
+            if fixed.changed {
+                answer = fixed.text
+                try await conn.emit(["type": "replace", "text": answer])
+                try await conn.emit(["type": "citations", "corrected": fixed.corrected, "removed": fixed.removed])
+            }
+        }
+
+        try await conn.emit(["type": "done"].merging(done) { a, _ in a })
     } catch {
         var message = error.localizedDescription
         if message.contains("not found") || message.contains("pull") {

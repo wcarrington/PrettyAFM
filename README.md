@@ -83,6 +83,25 @@ Measured on a 16 GB M2 Pro with a 60-page, ~31K-token PDF:
 - the first full summary took about 100 s (12 sections);
 - repeat summaries took about 14 s.
 
+## Accuracy
+
+The **Accuracy** menu in the chat toolbar has three settings:
+
+| Setting | What happens | Extra time on a 16 GB M2 Pro |
+|---|---|---|
+| **Fast** | One model answers. Citations are still checked (see below). | none |
+| **Checked** (default) | Answers about PDFs are fact-checked by the *other* model: Qwen checks Apple's answers, and Apple checks Qwen's when the text fits its window. If anything isn't supported, Qwen revises the answer. | ~5–30 s for short answers, up to ~100 s for long ones |
+| **Deep** | Qwen thinks step by step before answering, then the answer is checked as above. | 30 s to several minutes |
+
+**The double-check, step by step:**
+1. The checking model lists each claim in the answer. For each one it gives a verdict (supported / partly / not supported), a page, and a short exact quote. Apple uses guided generation and Qwen uses Ollama's JSON-schema output, so the result always parses.
+2. The checker's quotes are then verified against the PDF text. If a quote isn't actually in the document, the claim is marked unconfirmed rather than trusted.
+3. If any claim isn't supported, Qwen rewrites the answer from the fact-check results without adding new information. The UI shows "Revised after … found N claims the document doesn't support."
+
+Summary answers for very long PDFs aren't double-checked, because they're written from paraphrased section summaries, which can't be matched quote for quote.
+
+**Citation check (always on, every setting):** every "(p. N)" in an answer about a PDF is compared with the real pages. A page number beyond the end of the document, or a page that matches the sentence far worse than another page, is corrected to the best-matching page. If no page matches, the citation is removed. In testing, Apple's model often cited *clause numbers* as page numbers ("p. 13" in a 3-page contract). This check catches those. Set `LI_DEBUG_CITATIONS=1` to log each decision.
+
 ## Configuration
 
 | Variable | Default | Purpose |

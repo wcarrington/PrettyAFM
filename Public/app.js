@@ -3,22 +3,22 @@
   const $ = (s) => document.querySelector(s);
   const els = {
     messages: $("#messages"), empty: $("#empty"), form: $("#composer"), input: $("#input"),
-    send: $("#sendBtn"), file: $("#fileInput"), attachments: $("#attachments"), think: $("#thinkToggle"),
+    send: $("#sendBtn"), file: $("#fileInput"), attachments: $("#attachments"), accuracy: $("#accuracy"),
     newChat: $("#newChat"), segmented: $(".segmented"), navStatus: $("#navStatus"),
   };
   const STORE_KEY = "prettyafm.v1";
 
-  const state = { messages: [], mode: "auto", think: false, pending: [], pendingDocs: [], controller: null, status: null };
+  const state = { messages: [], mode: "auto", accuracy: "checked", pending: [], pendingDocs: [], controller: null, status: null };
 
   // ── Persistence (best effort; private windows may refuse storage) ─────────
   function save() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ messages: state.messages, mode: state.mode, think: state.think }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ messages: state.messages, mode: state.mode, accuracy: state.accuracy }));
     } catch {
       // Quota exceeded: usually large images. Keep the text, drop the images.
       try {
         const light = state.messages.map((m) => ({ ...m, images: [] }));
-        localStorage.setItem(STORE_KEY, JSON.stringify({ messages: light, mode: state.mode, think: state.think }));
+        localStorage.setItem(STORE_KEY, JSON.stringify({ messages: light, mode: state.mode, accuracy: state.accuracy }));
       } catch { /* storage unavailable */ }
     }
   }
@@ -28,7 +28,8 @@
       if (data) {
         state.messages = Array.isArray(data.messages) ? data.messages.filter((m) => m.role && typeof m.content === "string") : [];
         state.mode = ["auto", "apple", "qwen"].includes(data.mode) ? data.mode : "auto";
-        state.think = !!data.think;
+        // Older saves had a Think switch; it maps to Deep.
+        state.accuracy = ["fast", "checked", "deep"].includes(data.accuracy) ? data.accuracy : data.think ? "deep" : "checked";
       }
     } catch { /* ignore */ }
   }
@@ -119,11 +120,44 @@
     if (m.error) answer.firstChild.textContent = m.error;
     wrap.append(answer);
 
+    const status = el("p", "status-line");
+    wrap.append(status);
+
+    const review = el("p", "review-line");
+    renderReview(review, meta);
+    wrap.append(review);
+
     const foot = el("div", "meta", "");
     foot.textContent = metaLine(meta);
     wrap.append(foot);
 
-    return { wrap, chipHolder, reason, reroute, context, thinking, answer, foot };
+    return { wrap, chipHolder, reason, reroute, context, thinking, answer, status, review, foot };
+  }
+
+  /** One line summarizing the double-check and citation fixes. */
+  function renderReview(node, meta) {
+    const parts = [];
+    let cls = "";
+    const r = meta.review;
+    if (r) {
+      const who = r.checker === "apple" ? "Apple's model" : state.status?.qwen?.displayName || "Qwen";
+      if (r.revised) {
+        parts.push(`Revised after ${who} found ${r.problems} claim${r.problems === 1 ? "" : "s"} the document doesn't support`);
+        cls = "revised";
+      } else {
+        parts.push(`Checked by ${who}: ${r.supported} of ${r.checked} claim${r.checked === 1 ? "" : "s"} confirmed in the document`);
+        cls = r.unconfirmed ? "" : "ok";
+      }
+    }
+    const c = meta.citations;
+    if (c) {
+      const bits = [];
+      if (c.corrected) bits.push(`corrected ${c.corrected} page reference${c.corrected === 1 ? "" : "s"}`);
+      if (c.removed) bits.push(`removed ${c.removed} that matched no page`);
+      if (bits.length) parts.push(bits.join(", ").replace(/^./, (x) => (parts.length ? x : x.toUpperCase())));
+    }
+    node.textContent = parts.length ? parts.join("; ") + "." : "";
+    node.className = `review-line ${cls}`;
   }
 
   function renderAll() {
@@ -160,7 +194,7 @@
       els.segmented.querySelector(`[data-mode="${next}"]`).focus();
     }
   });
-  els.think.addEventListener("change", () => { state.think = els.think.checked; save(); });
+  els.accuracy.addEventListener("change", () => { state.accuracy = els.accuracy.value; save(); });
 
   els.newChat.addEventListener("click", () => {
     stop();
@@ -372,7 +406,7 @@
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, mode: state.mode, think: state.think }),
+        body: JSON.stringify({ messages: history, mode: state.mode, accuracy: state.accuracy }),
         signal: state.controller.signal,
       });
       if (!res.ok || !res.body) {
@@ -386,6 +420,7 @@
     } finally {
       if (frame) cancelAnimationFrame(frame), (frame = 0);
       ui.answer.classList.remove("caret");
+      ui.status.textContent = "";
       if (reply.error && !reply.content) {
         ui.answer.innerHTML = `<p class="error-text"></p>`;
         ui.answer.firstChild.textContent = reply.error;
@@ -420,6 +455,16 @@
           paint();
           break;
         case "progress": ui.reason.textContent = e.message; scrollToEnd(); break;
+        case "status": ui.status.textContent = e.text; scrollToEnd(); break;
+        case "review":
+          reply.meta.review = { checked: e.checked, supported: e.supported, problems: e.problems, unconfirmed: e.unconfirmed, checker: e.checker, revised: e.revised };
+          ui.status.textContent = "";
+          renderReview(ui.review, reply.meta);
+          break;
+        case "citations":
+          reply.meta.citations = { corrected: e.corrected || 0, removed: e.removed || 0 };
+          renderReview(ui.review, reply.meta);
+          break;
         case "context":
           reply.meta.context = e.text;
           ui.context.textContent = e.text + ".";
@@ -508,7 +553,7 @@
   // ── Boot ─────────────────────────────────────────────────────────────────
   load();
   setMode(state.mode);
-  els.think.checked = state.think;
+  els.accuracy.value = state.accuracy;
   renderAll();
   autosize();
   refreshStatus();

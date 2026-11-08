@@ -16,10 +16,18 @@ enum DocumentContext {
     static let passageTokens = 450
     static let maxSummarySections = 80     // ~220K tokens; beyond this, fall back to retrieval
 
-    static func prepare(messages: [ChatMessage], mode: String, profile: QwenProfile, emit: Emit) async throws -> [ChatMessage] {
+    /// The augmented conversation plus what the answer can be checked against.
+    struct Prepared {
+        var messages: [ChatMessage]
+        var docs: [StoredDocument] = []
+        var strategy = ""            // "full" | "summary" | "retrieval"
+        var context = ""             // exactly what the model was shown
+    }
+
+    static func prepare(messages: [ChatMessage], mode: String, profile: QwenProfile, emit: Emit) async throws -> Prepared {
         var seen = Set<String>()
         let ids = messages.flatMap(\.documents).filter { seen.insert($0).inserted }
-        guard !ids.isEmpty, let lastIdx = messages.lastIndex(where: { $0.role == "user" }) else { return messages }
+        guard !ids.isEmpty, let lastIdx = messages.lastIndex(where: { $0.role == "user" }) else { return Prepared(messages: messages) }
 
         var docs: [StoredDocument] = []
         for id in ids {
@@ -41,26 +49,29 @@ enum DocumentContext {
         let full = docs.map { render($0, body: numbered($0)) }.joined(separator: "\n\n")
         let context: String
         let note: String
+        let strategy: String
 
         if estimateTokens(full) <= budget {
             context = full
+            strategy = "full"
             note = "Read " + docs.map { "all \($0.pages.count) page\($0.pages.count == 1 ? "" : "s") of \($0.name)" }.joined(separator: " and ")
         } else if isSummaryRequest(question), appleOK, mode != "qwen",
                   let summarized = try await summarize(docs, finalBudget: mode == "qwen" ? qwenBudget : appleBudget,
                                                        profile: profile, emit: emit) {
             context = summarized.text
             note = summarized.note
+            strategy = "summary"
         } else {
             let r = retrieve(docs, question: question, budget: budget)
             context = r.text
             note = r.note
+            strategy = "retrieval"
         }
 
         try await emit(["type": "context", "text": note])
         var out = messages
-        out[lastIdx].documentContext =
-            "The user attached the document(s) below. Base your answer on them, and cite pages like (p. 4) when you use a specific part.\n\n" + context
-        return out
+        out[lastIdx].documentContext = citationRules(docs) + "\n\n" + context
+        return Prepared(messages: out, docs: docs, strategy: strategy, context: context)
     }
 
     // MARK: Rendering
@@ -70,9 +81,25 @@ enum DocumentContext {
         return "<document name=\"\(name)\" pages=\"\(doc.pages.count)\">\n\(body)\n</document>"
     }
 
+    static func pageMarker(_ n: Int, of total: Int) -> String { "=== PAGE \(n) OF \(total) ===" }
+
+    /// Citation instructions. No example page number: small models copy examples literally.
+    static func citationRules(_ docs: [StoredDocument]) -> String {
+        var rules = "The user attached the document(s) below. Base your answer on them.\n"
+        rules += "Page citations: put the page number in parentheses after the sentence it supports, as (p. N). "
+        rules += "Pages are marked with lines like \"=== PAGE N OF M ===\". Use only those page numbers. "
+        rules += "Section, clause, or item numbers inside the text are NOT page numbers. If unsure of the page, give no citation.\n"
+        for d in docs {
+            rules += "• \(d.name) has exactly \(d.pages.count) page\(d.pages.count == 1 ? "" : "s"); valid citations are p. 1"
+            rules += d.pages.count > 1 ? " to p. \(d.pages.count).\n" : " only.\n"
+        }
+        if docs.count > 1 { rules += "With several documents, name the file in the citation: (\(docs[0].name), p. N).\n" }
+        return rules
+    }
+
     static func numbered(_ doc: StoredDocument) -> String {
         doc.pages.enumerated().filter { !$0.element.isEmpty }
-            .map { "[Page \($0.offset + 1)]\n\($0.element)" }.joined(separator: "\n\n")
+            .map { "\(pageMarker($0.offset + 1, of: doc.pages.count))\n\($0.element)" }.joined(separator: "\n\n")
     }
 
     static func isSummaryRequest(_ q: String) -> Bool {
@@ -126,7 +153,7 @@ enum DocumentContext {
                     if bufTokens + t > target, !buf.isEmpty { flush() }
                     if buf.isEmpty { start = pageNo }
                     if markedPage != pageNo {
-                        buf += (buf.isEmpty ? "" : "\n\n") + "[Page \(pageNo)]\n"
+                        buf += (buf.isEmpty ? "" : "\n\n") + pageMarker(pageNo, of: doc.pages.count) + "\n"
                         markedPage = pageNo
                     } else {
                         buf += "\n\n"

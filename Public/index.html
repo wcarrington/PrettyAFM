@@ -43,10 +43,14 @@
             <button role="radio" data-mode="qwen" aria-checked="false">Qwen</button>
             <span class="seg-thumb" aria-hidden="true"></span>
           </div>
-          <label class="switch" title="Let Qwen reason step by step before answering. Slower, but better for hard problems.">
-            <input type="checkbox" id="thinkToggle">
-            <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
-            <span>Think</span>
+          <label class="popup" title="Fast: one model answers. Checked: answers about PDFs are fact-checked by the other model and fixed if needed. Deep: Qwen thinks step by step, then the answer is checked.">
+            <span class="sr-only">Accuracy</span>
+            <select id="accuracy">
+              <option value="fast">Fast</option>
+              <option value="checked">Checked</option>
+              <option value="deep">Deep</option>
+            </select>
+            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </label>
           <button class="ghost-btn" id="newChat" title="Start a new conversation">
             <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -165,7 +169,7 @@
         <li>
           <span class="step-num">5</span>
           <h3>PDFs of any length.</h3>
-          <p>Text is extracted on device, with OCR for scans. Short PDFs are read in full. For long ones, Apple's model summarizes section by section, or the most relevant pages are found for your question.</p>
+          <p>Text is extracted on device, with OCR for scans. Short PDFs are read in full. For long ones, Apple's model summarizes section by section, or the most relevant pages are found for your question. Every page citation is checked against the real pages.</p>
         </li>
       </ol>
     </section>
