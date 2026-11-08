@@ -15,15 +15,34 @@ Nothing leaves your Mac. The server listens on `127.0.0.1` only.
 - Xcode 26+ (or the Swift 6.2+ toolchain)
 - [Ollama](https://ollama.com/download)
 
-## Run
+## Install
 
 ```sh
-./scripts/start.sh            # release build, opens http://localhost:8642
-# or, during development:
-swift run PrettyAFM --open
+./scripts/install.sh --dry-run   # check this Mac and show the plan; changes nothing
+./scripts/install.sh             # install what's missing (asks first)
+./scripts/start.sh               # build and open http://localhost:8642
 ```
 
-If the Qwen model isn't downloaded yet, click **Download** in the app's **Models** section, or run `ollama pull <tag>` yourself.
+The installer checks the Mac, the Swift toolchain, Ollama and Apple Intelligence. It builds PrettyAFM, downloads the Qwen model this Mac should use, and confirms the server starts and listens only on `127.0.0.1`. Re-running it is safe, because finished steps are skipped. Options: `--yes` for unattended runs, `--skip-model` to skip the model download. The log is saved to `~/Library/Logs/PrettyAFM/install.log`.
+
+### Installer safeguards
+
+- **No root.** It refuses to run as root and never calls `sudo`.
+- **Hard requirements fail fast,** before anything is downloaded: Apple silicon, macOS 26+, Swift 6.2+ with the FoundationModels SDK.
+- **Asks first.** It shows a plan with download sizes and asks before downloading or installing. Without a terminal it refuses unless `--yes` is passed.
+- **Verified Ollama.** Ollama comes only from `ollama.com`, never through `curl | sh`. Before it's copied to `/Applications`, the installer checks that the code signature is intact, the developer Team ID is Ollama's (`3MU9H2V9Y9`), and Gatekeeper accepts it as notarized. An Ollama that's already installed has its Team ID checked too.
+- **Disk space.** The model download only proceeds if its size plus 10 GB stays free. The check runs again just before downloading. Set `PRETTYAFM_DISK_RESERVE_GB` to change the reserve.
+- **Same model as the app.** The installer asks the app which model to use (`PrettyAFM --print-config`), so they can't disagree.
+- **Privacy.** It warns if Ollama is reachable from your network (for example with `OLLAMA_HOST=0.0.0.0`), and confirms PrettyAFM listens only on `127.0.0.1`.
+- **System settings are never changed.** If Apple Intelligence is off, it explains and opens System Settings. It doesn't toggle anything itself.
+- **Xcode is never installed for you.** If developer tools are missing, it opens Apple's Command Line Tools installer, which asks you first.
+
+### Uninstall
+
+```sh
+./scripts/uninstall.sh                  # asks before removing the model, saved PDFs, logs, build output
+./scripts/uninstall.sh --remove-ollama  # also offers to remove Ollama and all of its models
+```
 
 ## Which Qwen model is used
 

@@ -11,6 +11,26 @@ func argValue(_ name: String) -> String? {
 let port = UInt16(argValue("--port") ?? ProcessInfo.processInfo.environment["LI_PORT"] ?? "8642") ?? 8642
 let profile = QwenProfile.forThisMac()
 
+// `PrettyAFM --print-config` reports what this Mac will use, without starting the server.
+// The installer reads it so it downloads exactly the model the app expects.
+if args.contains("--print-config") {
+    var qwen: [String: Any] = ["model": profile.model, "displayName": profile.displayName, "contextTokens": profile.contextTokens]
+    if let gb = profile.downloadGB { qwen["downloadGB"] = gb }
+    var apple = AppleModel.status()
+    if case .unavailable(let reason) = AppleModel.model.availability {
+        apple["code"] = switch reason {
+        case .deviceNotEligible: "deviceNotEligible"
+        case .appleIntelligenceNotEnabled: "appleIntelligenceNotEnabled"
+        case .modelNotReady: "modelNotReady"
+        @unknown default: "unknown"
+        }
+    }
+    let config: [String: Any] = ["memoryGB": profile.memoryGB, "qwen": qwen, "apple": apple]
+    let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys])
+    print(String(decoding: data, as: UTF8.self))
+    exit(0)
+}
+
 let publicDir: URL = {
     if let p = argValue("--public") ?? ProcessInfo.processInfo.environment["LI_PUBLIC"] { return URL(fileURLWithPath: p) }
     let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appending(path: "Public")

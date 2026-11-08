@@ -43,6 +43,12 @@ struct QwenProfile {
     let memoryGB: Int
     let note: String
 
+    /// Download size from the Ollama library, used by the installer's disk-space check.
+    /// nil for custom models set with LI_QWEN_MODEL.
+    var downloadGB: Double? {
+        ["qwen3.5:9b-q4_K_M": 6.6, "qwen3.8:27b-q4_K_M": 18, "qwen3.8:27b-q8_0": 30][model]
+    }
+
     static func forThisMac() -> QwenProfile {
         let gb = Int((Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824).rounded())
         let env = ProcessInfo.processInfo.environment
