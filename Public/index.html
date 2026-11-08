@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PrettyAFM</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="globalnav" aria-label="Main">
+    <div class="nav-inner">
+      <a class="brand" href="#top" aria-label="PrettyAFM home">
+        <img src="icon.svg" alt="" width="18" height="18"> PrettyAFM
+      </a>
+      <ul class="nav-links">
+        <li><a href="#chat">Chat</a></li>
+        <li><a href="#models">Models</a></li>
+        <li><a href="#how">How it works</a></li>
+      </ul>
+      <span class="nav-status" id="navStatus" aria-live="polite"></span>
+    </div>
+  </nav>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">Private. On device. Free.</p>
+      <h1>Intelligence.<br><span class="gradient-text">Right on your Mac.</span></h1>
+      <p class="hero-sub">Apple's on-device foundation model handles everyday language tasks instantly. Qwen steps in for code, math and deep knowledge. Nothing ever leaves your Mac.</p>
+      <div class="hero-ctas">
+        <a class="pill pill-primary" href="#chat">Start a chat</a>
+        <a class="link-arrow" href="#how">How routing works</a>
+      </div>
+    </section>
+
+    <section class="chat-section" id="chat" aria-label="Chat">
+      <div class="chat-card">
+        <header class="chat-toolbar">
+          <div class="segmented" role="radiogroup" aria-label="Model selection">
+            <button role="radio" data-mode="auto" aria-checked="true">Auto</button>
+            <button role="radio" data-mode="apple" aria-checked="false">Apple</button>
+            <button role="radio" data-mode="qwen" aria-checked="false">Qwen</button>
+            <span class="seg-thumb" aria-hidden="true"></span>
+          </div>
+          <label class="switch" title="Let Qwen reason step by step before answering. Slower, but better for hard problems.">
+            <input type="checkbox" id="thinkToggle">
+            <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+            <span>Think</span>
+          </label>
+          <button class="ghost-btn" id="newChat" title="Start a new conversation">
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span class="btn-label">New chat</span>
+          </button>
+        </header>
+
+        <div class="messages" id="messages" aria-live="polite">
+          <div class="empty" id="empty">
+            <h2>What can I help with?</h2>
+            <p>Each message goes to the best local model automatically.</p>
+            <div class="suggestions">
+              <button class="suggestion" data-prompt="Make this sound friendlier but still professional: &quot;Per my last email, the deliverables are overdue. Send them today.&quot;">
+                <span class="sug-model apple">Apple</span>
+                Make a curt email friendlier
+              </button>
+              <button class="suggestion" data-prompt="Give me 8 creative names for a neighborhood coffee shop that also sells houseplants.">
+                <span class="sug-model apple">Apple</span>
+                Brainstorm names for a café
+              </button>
+              <button class="suggestion" data-prompt="Write a Swift function that debounces a closure using Swift concurrency, with a short usage example.">
+                <span class="sug-model qwen">Qwen</span>
+                Write a Swift debounce function
+              </button>
+              <button class="suggestion" data-prompt="Explain how the TLS 1.3 handshake works and why it's faster than TLS 1.2.">
+                <span class="sug-model qwen">Qwen</span>
+                Explain the TLS 1.3 handshake
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <form class="composer" id="composer">
+          <div class="attachments" id="attachments" hidden></div>
+          <div class="composer-row">
+            <label class="icon-btn" title="Attach an image (uses Qwen's vision)">
+              <input type="file" id="fileInput" accept="image/*" multiple hidden>
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M21 12.5l-8.2 8.2a5.3 5.3 0 01-7.5-7.5l8.6-8.6a3.5 3.5 0 015 5l-8.6 8.6a1.8 1.8 0 01-2.5-2.5l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="sr-only">Attach image</span>
+            </label>
+            <textarea id="input" rows="1" placeholder="Message PrettyAFM" aria-label="Message"></textarea>
+            <button type="submit" class="send-btn" id="sendBtn" aria-label="Send" disabled>
+              <svg class="i-send" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg class="i-stop" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </form>
+      </div>
+      <p class="fineprint">Responses are generated locally and can be inaccurate. Apple's on-device model is optimized for language tasks, not facts.</p>
+    </section>
+
+    <section class="models-section" id="models">
+      <div class="section-head">
+        <p class="eyebrow">Models</p>
+        <h2>Two models. One conversation.</h2>
+        <p class="section-sub" id="memoryLine">Checking your Mac…</p>
+      </div>
+      <div class="tiles">
+        <article class="tile tile-apple">
+          <div class="tile-glyph apple-glyph" aria-hidden="true"></div>
+          <h3>Apple Foundation Model</h3>
+          <p class="tile-status" id="appleStatus"><span class="dot"></span>Checking…</p>
+          <p class="tile-copy">A compact model built into macOS and tuned for language tasks. It answers in a fraction of a second and uses almost no extra memory.</p>
+          <ul class="facts">
+            <li><span>Best at</span>Summaries, rewriting, extraction, tagging, short creative writing, conversation</li>
+            <li><span>Context</span><b id="appleCtx">—</b> tokens</li>
+            <li><span>Input</span>Text</li>
+          </ul>
+        </article>
+        <article class="tile tile-qwen">
+          <div class="tile-glyph qwen-glyph" aria-hidden="true"></div>
+          <h3 id="qwenName">Qwen</h3>
+          <p class="tile-status" id="qwenStatus"><span class="dot"></span>Checking…</p>
+          <p class="tile-copy" id="qwenNote">Runs through Ollama, sized to fit your Mac's memory.</p>
+          <ul class="facts">
+            <li><span>Best at</span>Code, math, reasoning, factual knowledge, long documents, images</li>
+            <li><span>Context</span><b id="qwenCtx">—</b> tokens</li>
+            <li><span>Model</span><code id="qwenTag">—</code></li>
+          </ul>
+          <div class="download" id="downloadBox" hidden>
+            <button class="pill pill-primary" id="downloadBtn">Download</button>
+            <div class="progress" id="progress" hidden><div class="progress-bar" id="progressBar"></div></div>
+            <p class="progress-label" id="progressLabel"></p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="how-section" id="how">
+      <div class="section-head">
+        <p class="eyebrow">How it works</p>
+        <h2>The right model for every message.</h2>
+        <p class="section-sub">Routing takes milliseconds and happens entirely on device.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>Clear-cut cases first.</h3>
+          <p>Images, code, math, Think mode, and conversations too long for Apple's 8K window go straight to Qwen. Greetings go straight to Apple.</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>On-device triage.</h3>
+          <p>Apple's model labels the request, such as rewriting, summarizing or factual question, using guided generation, so the label is always a valid category.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Follow-ups stay put.</h3>
+          <p>Short replies like “shorter” or “why?” go to the model that wrote the previous answer.</p>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <h3>Seamless fallback.</h3>
+          <p>If the on-device model hits its context limit or declines, Qwen picks up automatically.</p>
+        </li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>PrettyAFM runs entirely on your Mac using Apple's Foundation Models framework and Ollama. Not affiliated with Apple Inc.</p>
+  </footer>
+
+  <script src="markdown.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
