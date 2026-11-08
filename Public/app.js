@@ -8,7 +8,7 @@
   };
   const STORE_KEY = "prettyafm.v1";
 
-  const state = { messages: [], mode: "auto", accuracy: "checked", pending: [], pendingDocs: [], controller: null, status: null };
+  const state = { messages: [], mode: "auto", accuracy: "checked", pending: [], pendingDocs: [], controller: null, generation: 0, status: null };
 
   // ── Persistence (best effort; private windows may refuse storage) ─────────
   function save() {
@@ -198,9 +198,14 @@
 
   els.newChat.addEventListener("click", () => {
     stop();
+    // Invalidate the aborted request before its async cleanup can save its reply
+    // into this newly cleared conversation.
+    state.generation++;
+    state.controller = null;
     state.messages = [];
     save();
     renderAll();
+    updateSend();
     els.input.focus();
   });
 
@@ -375,7 +380,9 @@
     pinned = true;
     scrollToEnd(true);
 
-    state.controller = new AbortController();
+    const generation = ++state.generation;
+    const controller = new AbortController();
+    state.controller = controller;
     const started = performance.now();
     updateSend();
 
@@ -407,7 +414,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history, mode: state.mode, accuracy: state.accuracy }),
-        signal: state.controller.signal,
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({}));
@@ -419,6 +426,7 @@
       else reply.error = friendlyError(err);
     } finally {
       if (frame) cancelAnimationFrame(frame), (frame = 0);
+      if (generation !== state.generation) return;
       ui.answer.classList.remove("caret");
       ui.status.textContent = "";
       if (reply.error && !reply.content) {

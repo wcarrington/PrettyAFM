@@ -130,7 +130,7 @@ enum Router {
                 let result = try? await session.respond(
                     to: "Request:\n\"\"\"\n\(snippet)\n\"\"\"",
                     generating: Triage.self,
-                    options: GenerationOptions(sampling: .greedy))
+                    options: GenerationOptions(samplingMode: .greedy))
                 return result?.content.kind
             }
             group.addTask {

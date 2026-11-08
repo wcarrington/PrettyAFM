@@ -184,7 +184,7 @@ enum Verifier {
         if checker == .apple {
             let session = LanguageModelSession(instructions: checkInstructions)
             guard let r = try? await session.respond(to: request, generating: ClaimReport.self,
-                                                     options: GenerationOptions(sampling: .greedy)) else { return nil }
+                                                     options: GenerationOptions(samplingMode: .greedy)) else { return nil }
             claims = r.content.claims.map { Claim(claim: $0.claim, verdict: $0.verdict.rawValue, page: $0.page, evidence: $0.evidence) }
         } else {
             guard let c = try? await qwenCheck(request: request, profile: profile) else { return nil }

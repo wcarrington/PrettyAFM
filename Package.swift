@@ -9,6 +9,10 @@ let package = Package(
             name: "PrettyAFM",
             path: "Sources/PrettyAFM",
             swiftSettings: [.swiftLanguageMode(.v5)]
-        )
+        ),
+        .testTarget(
+            name: "PrettyAFMTests",
+            dependencies: ["PrettyAFM"]
+        ),
     ]
 )

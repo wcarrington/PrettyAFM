@@ -64,13 +64,17 @@ final class HTTPConnection: @unchecked Sendable {
 
         var headers: [String: String] = [:]
         for line in lines {
-            guard let colon = line.firstIndex(of: ":") else { continue }
+            guard let colon = line.firstIndex(of: ":") else { throw HTTPError.malformed }
             let key = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            guard !key.isEmpty else { throw HTTPError.malformed }
+            // Multiple Content-Length fields are a common source of request-boundary ambiguity.
+            guard key != "content-length" || headers[key] == nil else { throw HTTPError.malformed }
             headers[key] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
 
-        let length = Int(headers["content-length"] ?? "0") ?? 0
-        guard length <= Self.maxBody else { throw HTTPError.tooLarge }
+        let length = try Self.contentLength(headers["content-length"])
+        // This tiny server intentionally supports fixed-length requests only.
+        guard headers["transfer-encoding"] == nil else { throw HTTPError.malformed }
         var body = Data(buffer[headerRange.upperBound...])
         while body.count < length { body.append(try await receiveChunk()) }
 
@@ -84,6 +88,15 @@ final class HTTPConnection: @unchecked Sendable {
                            query: query,
                            headers: headers,
                            body: body.prefix(length))
+    }
+
+    static func contentLength(_ value: String?) throws -> Int {
+        guard let value else { return 0 }
+        guard !value.isEmpty, value.allSatisfy(\.isNumber), let length = Int(value) else {
+            throw HTTPError.malformed
+        }
+        guard length <= maxBody else { throw HTTPError.tooLarge }
+        return length
     }
 
     func send(_ data: Data) async throws {
