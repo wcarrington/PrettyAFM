@@ -1,11 +1,13 @@
 # PrettyAFM
 
-A web chat app in the style of Apple's website that runs entirely on your Mac. Each message goes to the local model best suited to it:
+A web chat app styled after the Applecart brand (concentric-circle motion, Lora headings, blue and gray palette) that runs entirely on your Mac. Each message goes to the local model best suited to it:
 
 - **Apple Foundation Model** (the on-device model built into macOS): summarizing, rewriting, extraction, tagging, short creative writing and conversation. It answers in well under a second.
 - **Qwen via Ollama**: code, math, reasoning, factual knowledge, long documents and images.
 
-You can attach PDFs by clicking the paperclip, dragging them onto the chat, or pasting them.
+The page greets you by your macOS first name and puts the composer inside an animated circle that pulses while a reply streams. The left toolbar holds New, Search, Pinned and Recents (saved in your browser). The conversation itself slides out in a panel on the right as soon as you start typing. An Appearance switch at the bottom of the left toolbar picks light, dark, or your system setting.
+
+You can attach PDFs by clicking the paperclip, dragging them onto the page, or pasting them.
 
 Nothing leaves your Mac. The server listens on `127.0.0.1` only.
 
@@ -111,6 +113,7 @@ Summary answers for very long PDFs aren't double-checked, because they're writte
 | `LI_QWEN_CTX` | by memory | Qwen context length (`num_ctx`) |
 | `LI_APPLE_BUDGET` | `0.7` | Share of Apple's context window a conversation may use before it goes to Qwen |
 | `OLLAMA_HOST_URL` | `http://127.0.0.1:11434` | Ollama address |
+| `LI_USER_NAME` | your macOS first name | Name used in the greeting; set it to an empty string for no name |
 
 ## Layout
 
@@ -125,4 +128,7 @@ Sources/PrettyAFM/
   DocumentContext.swift  Full text vs. section summaries vs. relevant passages for attached PDFs
   Models.swift      Shared types and the memory-based Qwen choice
 Public/             Web UI (plain HTML/CSS/JS, no build step, no CDN)
+  orbit.js          Concentric-circle animation; speeds up and pulses while output streams
+  theme.js          Light / dark / system theme switch (runs before first paint)
+  fonts/            Lora (SIL Open Font License), bundled so the page works offline
 ```

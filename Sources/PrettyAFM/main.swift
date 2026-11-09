@@ -43,6 +43,12 @@ let publicDir: URL = {
 
 // MARK: Handlers
 
+/// First name for the greeting ("Hello, Will"). LI_USER_NAME overrides; empty disables it.
+let userFirstName: String = {
+    if let n = ProcessInfo.processInfo.environment["LI_USER_NAME"] { return n }
+    return NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
+}()
+
 func statusJSON() async -> [String: Any] {
     let installed = await Ollama.installedModels()
     let normalize: (String) -> String = { $0.hasSuffix(":latest") ? String($0.dropLast(7)) : $0 }
@@ -58,6 +64,7 @@ func statusJSON() async -> [String: Any] {
             "installed": isInstalled,
         ] as [String: Any],
         "memoryGB": profile.memoryGB,
+        "userName": userFirstName,
     ]
 }
 
@@ -204,7 +211,7 @@ func handlePull(_ conn: HTTPConnection) async {
 
 let mimeTypes = ["html": "text/html; charset=utf-8", "css": "text/css; charset=utf-8",
                  "js": "text/javascript; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
-                 "ico": "image/x-icon", "json": "application/json"]
+                 "ico": "image/x-icon", "json": "application/json", "woff2": "font/woff2", "txt": "text/plain; charset=utf-8"]
 
 func serveStatic(_ path: String, _ conn: HTTPConnection) async {
     let relative = path == "/" ? "index.html" : String(path.dropFirst())
