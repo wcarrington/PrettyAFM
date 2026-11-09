@@ -29,4 +29,27 @@ final class PrettyAFMTests: XCTestCase {
     func testPDFTextCleanup() {
         XCTAssertEqual(PDFExtractor.clean("hy-\nphen   words\n\n\nnext"), "hyphen words\n\nnext")
     }
+
+    func testCollectiveDocumentReferencesAreDetectedBeforeLoading() {
+        XCTAssertTrue(DocumentContext.asksAboutSeveralDocuments("Compare both PDFs"))
+        XCTAssertTrue(DocumentContext.asksAboutSeveralDocuments("What changed in the second document?"))
+        XCTAssertTrue(DocumentContext.asksAboutSeveralDocuments("Review all the files I attached"))
+        XCTAssertFalse(DocumentContext.asksAboutSeveralDocuments("Summarize this document"))
+    }
+
+    func testEarlierDocumentCanBeSelectedByFilename() {
+        let memo = StoredDocument(id: String(repeating: "a", count: 64), name: "Q3 Memo.pdf",
+                                  pages: ["text"], ocrPages: 0)
+        XCTAssertEqual(DocumentContext.referencedEarlier("What does Q3 Memo say?", among: [memo]).map(\.id), [memo.id])
+        XCTAssertTrue(DocumentContext.referencedEarlier("Summarize the current attachment", among: [memo]).isEmpty)
+    }
+
+    func testShortEarlierFilenameDoesNotMatchUnrelatedCitationPrefix() {
+        let current = StoredDocument(id: String(repeating: "a", count: 64), name: "current.pdf",
+                                     pages: ["Revenue data rose sharply."], ocrPages: 0)
+        let earlier = StoredDocument(id: String(repeating: "b", count: 64), name: "a.pdf",
+                                     pages: ["Unrelated text."], ocrPages: 0)
+        let result = CitationCheck.check("Revenue data rose sharply (data, p. 99).", docs: [current], earlier: [earlier])
+        XCTAssertFalse(result.text.contains("p. 99"))
+    }
 }

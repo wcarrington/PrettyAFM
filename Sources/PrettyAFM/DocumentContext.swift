@@ -36,6 +36,9 @@ enum DocumentContext {
         // them: by file name, or with wording like "compare", "both", "the first document".
         let latestIDs = messages.last(where: { $0.role == "user" && !$0.documents.isEmpty })?.documents ?? []
         var focus = Set(latestIDs)
+        // Decide this before loading. If a requested older PDF has disappeared from the store,
+        // it must produce an error rather than silently comparing only the files that remain.
+        if asksAboutSeveralDocuments(question) { focus.formUnion(ids) }
 
         var all: [StoredDocument] = []
         for id in ids {
@@ -94,13 +97,17 @@ enum DocumentContext {
     /// Earlier PDFs the question explicitly asks about: named by file name, or referred to collectively.
     static func referencedEarlier(_ question: String, among earlier: [StoredDocument]) -> [StoredDocument] {
         guard !earlier.isEmpty else { return [] }
-        let crossDoc = #"(?i)\b(compar\w*|both|versus|vs\.?|differen\w*|contrast|previous|earlier|prior|other (one|document|file|pdf)s?|first (one|document|file|pdf)|all (the |of the |these |those )?(documents|files|pdfs)|each (document|file|pdf)|(documents|files|pdfs) (i|we) (attached|uploaded|shared))\b"#
-        if question.range(of: crossDoc, options: .regularExpression) != nil { return earlier }
+        if asksAboutSeveralDocuments(question) { return earlier }
         let q = question.lowercased()
         return earlier.filter { d in
             let stem = (d.name as NSString).deletingPathExtension.lowercased()
             return q.contains(d.name.lowercased()) || (stem.count >= 3 && q.contains(stem))
         }
+    }
+
+    static func asksAboutSeveralDocuments(_ question: String) -> Bool {
+        let pattern = #"(?i)\b(compar\w*|both|versus|vs\.?|differen\w*|contrast|previous|earlier|prior|other (one|document|file|pdf)s?|(?:first|second|third|\d+(?:st|nd|rd|th)) (one|document|file|pdf)|all (the |of the |these |those )?(documents|files|pdfs)|each (document|file|pdf)|(documents|files|pdfs) (i|we) (attached|uploaded|shared))\b"#
+        return question.range(of: pattern, options: .regularExpression) != nil
     }
 
     // MARK: Rendering

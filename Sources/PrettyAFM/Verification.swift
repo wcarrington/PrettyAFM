@@ -39,13 +39,15 @@ enum CitationCheck {
             let numbers = ns.substring(with: m.range(at: 2))
 
             let names = { (d: StoredDocument) in
-                prefix.localizedCaseInsensitiveContains(d.name) || prefix.localizedCaseInsensitiveContains((d.name as NSString).deletingPathExtension)
+                let stem = (d.name as NSString).deletingPathExtension
+                return prefix.localizedCaseInsensitiveContains(d.name)
+                    || (stem.count >= 3 && prefix.localizedCaseInsensitiveContains(stem))
             }
             if earlier.contains(where: names), !docs.contains(where: names) {
                 out += original; sentenceStart = cursor; continue
             }
             // Which document? Named in the citation, else the only one.
-            let docIndex = docs.firstIndex { prefix.localizedCaseInsensitiveContains($0.name) || prefix.localizedCaseInsensitiveContains(($0.name as NSString).deletingPathExtension) }
+            let docIndex = docs.firstIndex(where: names)
                 ?? (docs.count == 1 ? 0 : nil)
 
             // The claim: text from the previous sentence boundary (or citation) up to this citation.
