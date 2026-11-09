@@ -156,7 +156,7 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
 
         // ── Citation check (always, deterministic) ──
         if !prepared.docs.isEmpty {
-            let fixed = CitationCheck.check(answer, docs: prepared.docs)
+            let fixed = CitationCheck.check(answer, docs: prepared.docs, earlier: prepared.earlier)
             if fixed.changed {
                 answer = fixed.text
                 try await conn.emit(["type": "replace", "text": answer])

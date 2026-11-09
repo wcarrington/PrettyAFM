@@ -22,22 +22,37 @@ enum DocumentContext {
         var docs: [StoredDocument] = []
         var strategy = ""            // "full" | "summary" | "retrieval"
         var context = ""             // exactly what the model was shown
+        var earlier: [StoredDocument] = []   // PDFs from earlier turns that this turn did not re-read
     }
 
     static func prepare(messages: [ChatMessage], mode: String, profile: QwenProfile, emit: Emit) async throws -> Prepared {
         var seen = Set<String>()
         let ids = messages.flatMap(\.documents).filter { seen.insert($0).inserted }
         guard !ids.isEmpty, let lastIdx = messages.lastIndex(where: { $0.role == "user" }) else { return Prepared(messages: messages) }
+        let question = messages[lastIdx].content
 
-        var docs: [StoredDocument] = []
+        // Only the most recent attachment is read for this turn. Earlier PDFs were already read when they were
+        // attached (the replies in the history cover them), so they're re-read only when the question asks for
+        // them: by file name, or with wording like "compare", "both", "the first document".
+        let latestIDs = messages.last(where: { $0.role == "user" && !$0.documents.isEmpty })?.documents ?? []
+        var focus = Set(latestIDs)
+
+        var all: [StoredDocument] = []
         for id in ids {
             guard let d = await DocumentStore.shared.get(id) else {
-                throw Failure(errorDescription: "A PDF in this conversation is no longer stored on this Mac. Attach it again.")
+                if focus.contains(id) {
+                    throw Failure(errorDescription: "A PDF in this conversation is no longer stored on this Mac. Attach it again.")
+                }
+                continue   // an older PDF that's gone doesn't block questions about the newer one
             }
-            docs.append(d)
+            all.append(d)
         }
-
-        let question = messages[lastIdx].content
+        for d in referencedEarlier(question, among: all.filter { !focus.contains($0.id) }) { focus.insert(d.id) }
+        let docs = all.filter { focus.contains($0.id) }
+        let earlier = all.filter { !focus.contains($0.id) }
+        guard !docs.isEmpty else {
+            throw Failure(errorDescription: "A PDF in this conversation is no longer stored on this Mac. Attach it again.")
+        }
         let history = messages.reduce(0) { $0 + estimateTokens($1.content) }
         let ratio = ProcessInfo.processInfo.environment["LI_APPLE_BUDGET"].flatMap(Double.init) ?? 0.7
         let appleBudget = max(1_200, Int(Double(AppleModel.model.contextSize) * ratio) - history - 400)
@@ -68,10 +83,24 @@ enum DocumentContext {
             strategy = "retrieval"
         }
 
-        try await emit(["type": "context", "text": note])
+        let earlierNote = earlier.isEmpty ? "" :
+            ". " + earlier.map(\.name).joined(separator: ", ") + " (attached earlier) wasn't read again"
+        try await emit(["type": "context", "text": note + earlierNote])
         var out = messages
-        out[lastIdx].documentContext = citationRules(docs) + "\n\n" + context
-        return Prepared(messages: out, docs: docs, strategy: strategy, context: context)
+        out[lastIdx].documentContext = citationRules(docs, earlier: earlier) + "\n\n" + context
+        return Prepared(messages: out, docs: docs, strategy: strategy, context: context, earlier: earlier)
+    }
+
+    /// Earlier PDFs the question explicitly asks about: named by file name, or referred to collectively.
+    static func referencedEarlier(_ question: String, among earlier: [StoredDocument]) -> [StoredDocument] {
+        guard !earlier.isEmpty else { return [] }
+        let crossDoc = #"(?i)\b(compar\w*|both|versus|vs\.?|differen\w*|contrast|previous|earlier|prior|other (one|document|file|pdf)s?|first (one|document|file|pdf)|all (the |of the |these |those )?(documents|files|pdfs)|each (document|file|pdf)|(documents|files|pdfs) (i|we) (attached|uploaded|shared))\b"#
+        if question.range(of: crossDoc, options: .regularExpression) != nil { return earlier }
+        let q = question.lowercased()
+        return earlier.filter { d in
+            let stem = (d.name as NSString).deletingPathExtension.lowercased()
+            return q.contains(d.name.lowercased()) || (stem.count >= 3 && q.contains(stem))
+        }
     }
 
     // MARK: Rendering
@@ -84,7 +113,7 @@ enum DocumentContext {
     static func pageMarker(_ n: Int, of total: Int) -> String { "=== PAGE \(n) OF \(total) ===" }
 
     /// Citation instructions. No example page number: small models copy examples literally.
-    static func citationRules(_ docs: [StoredDocument]) -> String {
+    static func citationRules(_ docs: [StoredDocument], earlier: [StoredDocument] = []) -> String {
         var rules = "The user attached the document(s) below. Base your answer on them.\n"
         rules += "Page citations: put the page number in parentheses after the sentence it supports, as (p. N). "
         rules += "Pages are marked with lines like \"=== PAGE N OF M ===\". Use only those page numbers. "
@@ -94,6 +123,10 @@ enum DocumentContext {
             rules += d.pages.count > 1 ? " to p. \(d.pages.count).\n" : " only.\n"
         }
         if docs.count > 1 { rules += "With several documents, name the file in the citation: (\(docs[0].name), p. N).\n" }
+        if !earlier.isEmpty {
+            rules += "Earlier in this conversation the user also attached " + earlier.map(\.name).joined(separator: ", ")
+            rules += ". Its text is not included here; answer about it only from your earlier replies, and don't cite its pages.\n"
+        }
         return rules
     }
 
@@ -313,9 +346,15 @@ enum DocumentContext {
             sectionsTotal += sections.count
 
             // Reduce: if the summaries are still too long for the final answer, summarize groups of them.
+            // The combined result is cached per budget, so asking again doesn't redo this.
             var level = summaries
             var round = 0
             let share = max(800, finalBudget / docs.count)
+            let reduceKey = "reduce:\(sectionTokens):\(share)"
+            if let cached = await DocumentStore.shared.get(doc.id)?.summaries[reduceKey] {
+                parts.append(render(doc, body: "Section-by-section summary, generated on device:\n\n" + cached))
+                continue
+            }
             while estimateTokens(level.joined(separator: "\n\n")) > share, level.count > 1, round < 3 {
                 round += 1
                 var groups: [[String]] = [[]]
@@ -332,6 +371,7 @@ enum DocumentContext {
                 }
                 level = next
             }
+            if round > 0 { await DocumentStore.shared.setSummary(doc.id, key: reduceKey, level.joined(separator: "\n\n")) }
             parts.append(render(doc, body: "Section-by-section summary, generated on device:\n\n" + level.joined(separator: "\n\n")))
         }
         let names = docs.map(\.name).joined(separator: " and ")

@@ -78,7 +78,9 @@ PDFKit extracts text page by page. Pages with no text layer, such as scans, are 
 
 Answers cite pages like "(p. 37)". A note under each answer says which pages were used.
 
-Extracted text and section summaries are saved in `~/Library/Application Support/PrettyAFM/documents/`, keyed by the file's SHA-256 hash. Re-attaching the same file is instant, a second summary of the same PDF skips the section step, and conversations keep working after a server restart. Delete that folder to clear them.
+In a conversation with several PDFs, each turn reads only the most recently attached one. Earlier PDFs aren't read again, since the replies about them are already in the conversation. They come back into the context only when your question names them (for example "in memo.pdf…") or refers to more than one ("compare both", "the first document", "all the files").
+
+Extracted text and section summaries are saved in `~/Library/Application Support/PrettyAFM/documents/`, keyed by the file's SHA-256 hash. Re-attaching the same file is instant, a second summary of the same PDF skips the section and combining steps, and conversations keep working after a server restart. Delete that folder to clear them.
 
 Measured on a 16 GB M2 Pro with a 60-page, ~31K-token PDF:
 - a fact-finding question took about 5 s;

@@ -73,7 +73,12 @@ enum AppleModel {
 
     /// Errors that mean "the on-device model can't do this", which are worth retrying on Qwen.
     static func shouldFallBack(_ error: Error) -> String? {
-        guard let e = error as? LanguageModelSession.GenerationError else { return nil }
+        if error is CancellationError { return nil }
+        guard let e = error as? LanguageModelSession.GenerationError else {
+            // Other framework errors (e.g. an opaque LanguageModelError -1) are transient model failures: let Qwen answer.
+            return String(reflecting: type(of: error)).hasPrefix("FoundationModels.")
+                ? "The on-device model hit an internal error." : nil
+        }
         switch e {
         case .exceededContextWindowSize: return "The conversation outgrew the on-device model's context window."
         case .guardrailViolation: return "The on-device model's safety guardrails declined this request."

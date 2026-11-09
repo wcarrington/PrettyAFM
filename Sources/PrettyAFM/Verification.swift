@@ -21,7 +21,8 @@ enum CitationCheck {
 
     static let debug = ProcessInfo.processInfo.environment["LI_DEBUG_CITATIONS"] != nil
 
-    static func check(_ answer: String, docs: [StoredDocument]) -> Result {
+    /// `earlier` are PDFs from previous turns that weren't shown this turn; citations naming them are left as they are.
+    static func check(_ answer: String, docs: [StoredDocument], earlier: [StoredDocument] = []) -> Result {
         guard !docs.isEmpty else { return Result(text: answer) }
         let pageTerms: [[Set<String>]] = docs.map { $0.pages.map { Set(DocumentContext.terms($0)) } }
         let ns = answer as NSString
@@ -37,6 +38,12 @@ enum CitationCheck {
             let prefix = ns.substring(with: m.range(at: 1))
             let numbers = ns.substring(with: m.range(at: 2))
 
+            let names = { (d: StoredDocument) in
+                prefix.localizedCaseInsensitiveContains(d.name) || prefix.localizedCaseInsensitiveContains((d.name as NSString).deletingPathExtension)
+            }
+            if earlier.contains(where: names), !docs.contains(where: names) {
+                out += original; sentenceStart = cursor; continue
+            }
             // Which document? Named in the citation, else the only one.
             let docIndex = docs.firstIndex { prefix.localizedCaseInsensitiveContains($0.name) || prefix.localizedCaseInsensitiveContains(($0.name as NSString).deletingPathExtension) }
                 ?? (docs.count == 1 ? 0 : nil)
