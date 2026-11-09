@@ -743,7 +743,12 @@
 
   async function refreshStatus() {
     let s;
-    try { s = await (await fetch("/api/status")).json(); }
+    try {
+      const res = await fetch("/api/status");
+      if (!res.ok) throw new Error(`Status request failed (${res.status})`);
+      s = await res.json();
+      if (!s?.apple || !s?.qwen) throw new Error("Status response is incomplete");
+    }
     catch {
       setDot($("#appleRow"), "bad"); setDot($("#qwenRow"), "bad");
       $("#modelNote").textContent = "The PrettyAFM server isn't responding.";
@@ -779,6 +784,10 @@
     label.textContent = "Starting download…";
     try {
       const res = await fetch("/api/pull", { method: "POST" });
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Download request failed (${res.status})`);
+      }
       await readNDJSON(res, (e) => {
         if (e.type === "progress") {
           if (e.total) {

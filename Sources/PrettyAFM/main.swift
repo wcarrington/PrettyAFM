@@ -79,7 +79,8 @@ func handleChat(_ req: HTTPRequest, _ conn: HTTPConnection) async {
     }
     let mode = body["mode"] as? String ?? "auto"
     // Accuracy: "fast" (no extra passes), "checked" (default: double-check answers about PDFs), "deep" (+ Qwen thinking).
-    let accuracy = ["fast", "checked", "deep"].contains(body["accuracy"] as? String ?? "") ? body["accuracy"] as! String : "checked"
+    let requestedAccuracy = body["accuracy"] as? String
+    let accuracy = requestedAccuracy.flatMap { ["fast", "checked", "deep"].contains($0) ? $0 : nil } ?? "checked"
     let think = accuracy == "deep" || (body["think"] as? Bool ?? false)
 
     do {
