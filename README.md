@@ -134,3 +134,12 @@ Public/             Web UI (plain HTML/CSS/JS, no build step, no CDN)
   theme.js          Light / dark / system theme switch (runs before first paint)
   fonts/            Lora (SIL Open Font License), bundled so the page works offline
 ```
+
+## Roadmap
+
+Planned, not yet built:
+
+- [ ] **Resizable conversation pane.** Drag the edge of the right pane to make it wider or narrower. The width is remembered between sessions.
+- [ ] **Export chats.** Save a conversation as Markdown or PDF, with the model that wrote each reply and its page citations.
+- [ ] **Copy a reply.** A copy button on each reply that copies its text (as Markdown or plain text).
+- [ ] **Voice and natural-language control.** Speak a message instead of typing it, using on-device speech recognition. Control the app in plain language, for example "start a new chat", "pin this", or "use Qwen for this one".
